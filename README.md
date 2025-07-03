@@ -1,16 +1,26 @@
-# Variational Autoencoder for Aerial Agriculture
+# Variational Autoencoders for Aerial Agricultural Analysis
 
-This repository contains implementations of Variational Autoencoder (VAE) variants and Autoencoders for learning compact representations from aerial drone imagery of agricultural fields. The models included aim to support applications such as precision agriculture, yield estimation, and field monitoring.
+This repository provides implementations of Autoencoders and Variational Autoencoder (VAE) variants designed for learning compact, informative representations from aerial drone imagery of agricultural fields. These models are intended to support key tasks in **precision agriculture**, including **crop monitoring**, **yield estimation**, and **field analysis**.
 
-## Models Included
-- **Autoencoder (AE)**
-Standard encoder-decoder architecture for unsupervised representation learning.
+## 🔍 Overview of Models
 
-- **Variational Autoencoder (VAE)**
-Probabilistic model that learns latent distributions for input data.
+- **Autoencoder (AE)**  
+  A standard encoder–decoder model for unsupervised feature extraction and image reconstruction.
 
-- **Beta-VAE**
-A VAE variant that introduces a β hyperparameter to control the disentanglement of latent variables.
+- **Variational Autoencoder (VAE)**  
+  A probabilistic generative model that learns a latent distribution over the input space, enabling stochastic sampling and smooth interpolation.
 
-- **Vector-Quantized VAE (VQ-VAE)**
-A VAE variant that uses discrete latent codes with vector quantization.
+- **β-VAE**  
+  A variant of VAE that introduces a hyperparameter β to promote disentangled latent representations, useful for more interpretable factors of variation.
+
+- **Vector-Quantized VAE (VQ-VAE)**  
+  A discrete latent variable model that uses vector quantization to learn a finite set of latent embeddings, improving interpretability and compression.
+
+## 🚀 Getting Started
+
+To train or evaluate a model, use the following command:
+
+```bash
+python main.py --config ./configs/vae_perceptual.yaml --model vqvae
+```
+
