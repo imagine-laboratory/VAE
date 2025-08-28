@@ -3,7 +3,7 @@
 This repository provides implementations of Autoencoders and Variational Autoencoder (VAE) variants designed for learning compact, informative representations from aerial drone imagery of agricultural fields. These models are intended to support key tasks in **precision agriculture**, including **crop monitoring**, **yield estimation**, and **field analysis**.
 
 ## Installation 
-We tested our code using CUDA 12.8. To install requirements, run in the  terminal:
+We tested our code using CUDA 12.8 and Python 3.11. To install requirements, run in the  terminal:
 ```bash
 pip3 install -r requirements.txt
 ```
