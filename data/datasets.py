@@ -23,9 +23,9 @@ class PineappleDataset(Dataset):
         augment_ratio (int): Ratio to augment the dataset for training.
     """
 
-    def __init__(self, test_txt="/home/rtxmsi1/Downloads/VAE_training-master (2)/test_ids_fold_1.txt", path="/home/rtxmsi1/Downloads/VAE_training-master (2)/FULL_VERTICAL_PINEAPPLE/FULL_UNIFIED",
+    def __init__(self, test_txt=None, path=None,
                  train=True, val=False, train_ratio=0.8, val_ratio=0.2,
-                 resize_img=256, augment=False, augment_ratio=2):
+                 resize_img=256, augment=False, augment_ratio=2, seed=42):
         assert not (train and val), "Only one of 'train' or 'val' should be True"
 
         self.path = path
@@ -33,6 +33,7 @@ class PineappleDataset(Dataset):
         self.train = train
         self.val = val
         self.augment = augment and train  # Only augment if training
+        self.seed = seed
 
         # Get all image file paths sorted alphabetically
         all_images = sorted(glob.glob(os.path.join(path, "*")))
@@ -54,7 +55,7 @@ class PineappleDataset(Dataset):
         remaining_images = [img for key, img in image_dict.items() if key not in test_ids]
 
         # Shuffle to ensure reproducibility
-        random.seed(42)
+        random.seed(seed)
         random.shuffle(remaining_images)
 
         # Compute split indices

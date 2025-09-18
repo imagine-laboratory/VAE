@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+import math
 
 import torch
 from typing import Optional, List, Dict
@@ -241,3 +242,23 @@ def vqvae_loss(recon_x, x, vq_loss):
     total_loss = recon_loss + vq_loss
 
     return total_loss/b_size, recon_loss/b_size, vq_loss/b_size
+
+
+def psnr(reconstructed: torch.Tensor, original: torch.Tensor, max_val: float = 1.0) -> float:
+    mse = torch.mean((reconstructed - original) ** 2).item()
+    if mse == 0:
+        return float("inf")
+    return 20 * math.log10(max_val / math.sqrt(mse))
+
+
+def ssim(reconstructed: torch.Tensor, original: torch.Tensor, max_val: float = 1.0, C1: float = 0.01**2, C2: float = 0.03**2) -> float:
+    # Simplified SSIM over the whole image
+    mu_x = reconstructed.mean()
+    mu_y = original.mean()
+    sigma_x = reconstructed.var()
+    sigma_y = original.var()
+    sigma_xy = ((reconstructed - mu_x) * (original - mu_y)).mean()
+
+    numerator = (2 * mu_x * mu_y + C1) * (2 * sigma_xy + C2)
+    denominator = (mu_x**2 + mu_y**2 + C1) * (sigma_x + sigma_y + C2)
+    return (numerator / denominator).item()

@@ -1,34 +1,39 @@
-#path_test_ids: "/home/rtxmsi1/Downloads/VAE_training-master (2)/test_ids_fold_1.txt"
-
 # -------------------- Training Hyperparameters --------------------
-batch_size: 8                # Batch size for training
-lr: 0.0001                   # Learning rate
-epochs: 100                  # Number of training epochs
-patience: 15                 # Early stopping patience
+batch_size: 8
+lr: 0.0001
+epochs: 100
+patience: 15
 
 # -------------------- Checkpoints & Output --------------------
-checkpoints: "/data/ffallas/generative/VAE/output/checkpoints"  # Base path for checkpoints
-#experiment_id: "default_experiment"  # Unique identifier for this experiment
+checkpoints: "/data/ffallas/generative/VAE/output/checkpoints"
 
 # -------------------- Dataset & Splits --------------------
-dataset: "/data/ffallas/datasets/vae/FULL_UNIFIED"  # Dataset path
-train_ratio: 0.8             # Ratio of train images for each fold
-val_ratio: 0.2               # Ratio of validation images
-resize_img: 256              # Resize images to this size
-augment: False                # Apply augmentation during training
-augment_ratio: 2             # Multiply training images for augmentation
-use_test_split: True         # Whether to keep a separate test set
-create_new_split: True       # Whether to create new splits or use existing txt files
-num_folds: 5                 # Number of folds for k-fold CV
+dataset: "/data/ffallas/datasets/vae/FULL_UNIFIED"
+train_ratio: 0.8
+val_ratio: 0.2
+resize_img: 256
+augment: False
+augment_ratio: 2
+use_test_split: True
+create_new_split: True
+num_folds: 5
 seed: 42
 
 # -------------------- VAE Loss --------------------
-beta_kl_loss: 0.1            # KL Loss weight
+kl_beta: 0.1   # renamed from beta_kl_loss for clarity
 
 # -------------------- Device / Architecture --------------------
-device: "cuda"                # Device for training
-architecture: "cuda"          # Model architecture (placeholder)
+device: "cuda"
+
+# -------------------- Reproducibility --------------------
+deterministic: True
+cudnn_benchmark: False
+
+# -------------------- DataLoader --------------------
+num_workers: 4
+pin_memory: True
+persistent_workers: True
 
 # -------------------- WandB --------------------
-wandb_project: "vae_ffm_temp1"      # WandB project name
-wandb_entity: "imagine-laboratory-conare"  # WandB entity/user
+wandb_project: "vae_ffm_temp1"
+wandb_entity: "imagine-laboratory-conare"
