@@ -17,8 +17,8 @@ def get_dataloaders(args):
     trainset = PineappleDataset(train=True, val=False, train_ratio=args.train_ratio, path=args.dataset)
     valset = PineappleDataset(train=False, val=True, train_ratio=args.train_ratio, path=args.dataset)
 
-    trainloader = DataLoader(trainset, batch_size=args.batch_size, shuffle=True, num_workers=2)
-    valloader = DataLoader(valset, batch_size=args.batch_size, shuffle=False, num_workers=2)
+    trainloader = DataLoader(trainset, batch_size=args.batch_size, shuffle=True, num_workers=1)
+    valloader = DataLoader(valset, batch_size=args.batch_size, shuffle=False, num_workers=1)
 
     return trainset, valset, trainloader, valloader
 

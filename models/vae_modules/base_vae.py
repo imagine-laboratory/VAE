@@ -2,8 +2,8 @@ import torch
 
 from torch import nn
 from torch.nn import functional as F
-from vae.encoder import VAE_Encoder
-from vae.decoder import VAE_Decoder
+from vae_modules.encoder import VAE_Encoder
+from vae_modules.decoder import VAE_Decoder
 
 def compute_vae_loss(original_img, reconstructed_img, mean, logvar, kl_beta=1, mse_reduction='sum'):
     batch_size = reconstructed_img.size(0)

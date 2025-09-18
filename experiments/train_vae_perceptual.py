@@ -1,5 +1,5 @@
 import os
-import torch
+import torchs
 import wandb
 import numpy as np
 
@@ -8,7 +8,7 @@ from torch.utils.data import DataLoader
 
 from tools.utils import create_directory, setup_wandb
 from data.datasets import PineappleDataset
-from models.vae import VAE
+from models.vae_modules import VAE
 from losses.loss import vae_perceptual_loss
 
 # ---- helpers.py ----
