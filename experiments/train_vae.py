@@ -51,7 +51,7 @@ def train_step(model, dataloader, optimizer, device, beta_kl_loss):
 
     return total_loss / count, total_recon / count, total_kl / count
 
-def validation_step(model, dataloader, device):
+def validation_step(model, dataloader, device, beta_kl_loss):
     model.eval()
     total_loss, total_recon, total_kl, count = 0, 0, 0, 0
 
@@ -60,7 +60,7 @@ def validation_step(model, dataloader, device):
             images = batch["image"].to(device)
             recon, mu, logvar = model(images)
 
-            loss_dict = vae_loss(recon, images, mu, logvar)
+            loss_dict = vae_loss(recon, images, mu, logvar, kl_beta=beta_kl_loss)
             total_loss += loss_dict["total"].item()
             total_recon += loss_dict["reconstruction"].item()
             total_kl += loss_dict["kl"].item()
@@ -91,14 +91,15 @@ def log_metrics_to_wandb(epoch, train_losses, val_losses, recon_img):
         "val_kl_loss": val_kl
     }, step=epoch)
 
-def save_checkpoint_if_best(model, loss, best_loss, path, epoch):
-    if loss < best_loss:
-        torch.save(model.state_dict(), os.path.join(path, f"weights_ck_{epoch}.pt"))
+def save_if_best_val(model, loss, best_loss, path, epoch):
+    min_delta = 1e-6
+    if loss < best_loss - min_delta:
+        torch.save(model.state_dict(), os.path.join(path, f"best.pt"))
         print(f"Checkpoint saved at epoch {epoch}.")
-        return loss, 0
+        return loss, True
     else:
         print("No improvement in loss.")
-        return best_loss, 1
+        return best_loss, False
 
 # ---- train_vae.py ----
 
@@ -111,7 +112,8 @@ def train_vae(args):
     trainset, valset, trainloader, valloader = get_dataloaders(args)
     model, optimizer = setup_model_and_optimizer(args)
 
-    best_loss = float('inf')
+    best_val_loss = float('inf')
+    best_epoch = -1
     patience_counter = 0
 
     for epoch in range(args.epochs):
@@ -119,7 +121,7 @@ def train_vae(args):
         train_losses = train_step(model, trainloader, optimizer, args.device, args.beta_kl_loss)
 
         # Validation
-        val_losses = validation_step(model, valloader, args.device)
+        val_losses = validation_step(model, valloader, args.device, args.beta_kl_loss)
 
         print(f"Epoch {epoch}: "
               f"Train Loss={train_losses[0]:.4f}, Recon={train_losses[1]:.4f}, KL={train_losses[2]:.4f}, "
@@ -130,8 +132,12 @@ def train_vae(args):
         log_metrics_to_wandb(epoch, train_losses, val_losses, recon_img)
 
         # Checkpoint and early stopping
-        best_loss, delta_patience = save_checkpoint_if_best(model, train_losses[0], best_loss, path_to_save_checkpoints, epoch)
-        patience_counter += delta_patience
+        best_val_loss, improved = save_if_best_val(model, val_losses[0], best_val_loss, path_to_save_checkpoints, epoch)
+        if improved:
+            patience_counter = 0
+            best_epoch = epoch
+        else:
+            delta_patience += 1
 
         if patience_counter >= args.patience:
             print("Early stopping triggered.")

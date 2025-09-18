@@ -90,7 +90,7 @@ def mse_loss(reconstructed, original, reduction='sum'):
     return loss_fn(reconstructed, original)
 
 
-def kl_divergence_loss(mean, logvar, beta_kl= 0.5, reduction='sum'):
+def kl_divergence_loss(mean, logvar, reduction='sum'):
     """
     Computes the KL divergence between the latent distribution and standard normal.
 
@@ -102,7 +102,7 @@ def kl_divergence_loss(mean, logvar, beta_kl= 0.5, reduction='sum'):
     Returns:
         KL divergence loss (float)
     """
-    kl = -beta_kl * torch.sum(1 + logvar - mean.pow(2) - logvar.exp())
+    kl = -0.5 * torch.sum(1 + logvar - mean.pow(2) - logvar.exp())
     if reduction == 'mean':
         return kl / mean.size(0)
     return kl
