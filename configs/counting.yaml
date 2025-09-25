@@ -1,0 +1,28 @@
+# =====================================
+# File: configs/counting.yaml  (NEW)
+# =====================================
+# --- Paths ---
+checkpoint: "/data/ffallas/generative/VAE/output/checkpoints/betaKL@0.001/weights_ck_397.pt"
+template_crops_dir: "/data/ffallas/datasets/vae/TEMPLATES_PINEAPPLES"   # your curated centered crops
+inference_images_dir: "/data/ffallas/datasets/vae/FULL_UNIFIED"          # folder with full images
+
+# Optionally save and reuse the bank
+template_bank_path: "/data/ffallas/generative/VAE/output/template_banks/pineapple_bank.pt"
+
+# --- Model / Inference ---
+device: "cuda"
+resize_img: 256
+# size (h,w) of the *latent* template crop (center of encoder feature map)
+template_hw: [9, 9]
+max_templates: 16
+
+# multi-scale correlation (applied by resizing templates in latent space)
+scales: [1.0, 0.8, 1.25]
+
+# peak picking
+nms_radius: 3
+threshold_mode: "percentile"   # [percentile | absolute]
+threshold_value: 90.0           # percentile value or absolute score
+
+# output
+out_csv: "/data/ffallas/generative/VAE/output/counts/pred_counts.csv"
