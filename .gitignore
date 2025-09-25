@@ -42,5 +42,7 @@ checkpoints/
 wandb/
 output/
 splits/
+template_crops_dir/
+latent_maps/
 
 .env
