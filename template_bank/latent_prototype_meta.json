@@ -1,0 +1,19 @@
+{
+  "num_crops": 1,
+  "image_path": "/data/ffallas/datasets/vae/FULL_UNIFIED/5b84927069fd4cb9a6b9bb91306e0bc9.png",
+  "box_xyxy": [
+    0.39347200000000093,
+    36.8,
+    28.953344,
+    91.52
+  ],
+  "resize_img": 256,
+  "roi_size": 9,
+  "latent_shape": [
+    4,
+    32,
+    32
+  ],
+  "spatial_scale": 0.125,
+  "note": "Channel-wise standardized"
+}
