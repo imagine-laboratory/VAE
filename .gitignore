@@ -1,0 +1,5 @@
+weights/
+*.zip
+*/__pycache__/
+data/*/
+models/vae/__pycache__/

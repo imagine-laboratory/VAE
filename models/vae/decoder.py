@@ -1,3 +1,9 @@
+# include the grand parent directory in the path
+import sys
+import os
+# check if the parent directory is already in sys.path to avoid duplicates
+if os.path.abspath(os.path.join(os.path.dirname(__file__), '..')) not in sys.path:
+    sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 import torch
 from torch import nn
 from torch.nn import functional as F
