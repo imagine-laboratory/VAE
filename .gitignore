@@ -34,6 +34,8 @@ htmlcov/
 # Logs
 *.log
 
+.env
+
 # Root-level project folders you want to ignore (adjust as needed)
 data/
 datasets/
@@ -44,5 +46,6 @@ output/
 splits/
 template_crops_dir/
 latent_maps/
-
-.env
+count_outputs/
+count_outputs_single/
+template_bank/

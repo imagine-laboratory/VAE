@@ -39,6 +39,6 @@ if __name__ == "__main__":
 
 
 
-#python main_bigmamma2.py extract --images_dir /data/ffallas/datasets/vae/FULL_UNIFIED --csv /data/ffallas/datasets/vae/FULL_UNIFIED_labels.csv --checkpoint /data/ffallas/generative/VAE/output/checkpoints/betaKL@0.001/weights_ck_397.pt --output_dir /data/ffallas/generative/VAE/template_bank --max_crops 1 --roi_size 9 --resize_img 256
+#python main_bigmamma2.py extract --images_dir /data/ffallas/datasets/vae/FULL_UNIFIED --csv /data/ffallas/datasets/vae/FULL_UNIFIED_labels.csv --checkpoint /data/ffallas/generative/VAE/output/checkpoints/betaKL@0.001/weights_ck_397.pt --output_dir /data/ffallas/generative/VAE/template_bank --max_crops 1 --roi_size 9 --resize_img 256 --feature_source feats
     
-#python main_bigmamma2.py count --images_dir /data/ffallas/datasets/vae/FULL_UNIFIED --prototype_pt /data/ffallas/generative/VAE/template_bank/latent_prototype.pt --checkpoint /data/ffallas/generative/VAE/output/checkpoints/betaKL@0.001/weights_ck_397.pt --output_dir /data/ffallas/generative/VAE/count_outputs_single --resize_img 256 --thresh 0.6 --pool_ks 3 --use_prototype_image --csv /data/ffallas/datasets/vae/FULL_UNIFIED_labels.csv
+#python main_bigmamma2.py count --images_dir /data/ffallas/datasets/vae/FULL_UNIFIED --prototype_pt /data/ffallas/generative/VAE/template_bank/latent_prototype.pt --checkpoint /data/ffallas/generative/VAE/output/checkpoints/betaKL@0.001/weights_ck_397.pt --output_dir /data/ffallas/generative/VAE/count_outputs_single --resize_img 256 --thresh 0.6 --pool_ks 3 --use_prototype_image --csv /data/ffallas/datasets/vae/FULL_UNIFIED_labels.csv --feature_source auto

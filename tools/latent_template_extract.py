@@ -3,7 +3,7 @@ import os
 import json
 import argparse
 import csv
-from typing import List, Dict, Tuple
+from typing import List, Dict, Tuple, Literal
 
 import torch
 import torch.nn.functional as F
@@ -15,10 +15,16 @@ import cv2
 from models.vae import VAE
 from tools.utils import select_device, set_seed, create_directory
 
+
 # ----------------------------
 # Helpers
 # ----------------------------
 def load_image_rgb(path: str, resize: int) -> np.ndarray:
+    """
+    Read image from disk and return an RGB uint8 image resized to (resize, resize).
+    Returns:
+      img: np.ndarray uint8, shape (H, W, 3) = (resize, resize, 3), values in [0,255]
+    """
     img = cv2.imread(path, cv2.IMREAD_COLOR)
     if img is None:
         raise FileNotFoundError(f"Could not read image: {path}")
@@ -27,109 +33,193 @@ def load_image_rgb(path: str, resize: int) -> np.ndarray:
     return img
 
 def to_tensor_chw01(img_rgb_uint8: np.ndarray) -> torch.Tensor:
+    """
+    Convert RGB uint8 image (H, W, 3) in [0,255] to float32 tensor (C, H, W) in [0,1].
+    Args:
+      img_rgb_uint8: np.uint8, (H, W, 3)
+    Returns:
+      x: torch.float32, (3, H, W) in [0,1]
+    """
     x = img_rgb_uint8.astype(np.float32) / 255.0
-    x = np.transpose(x, (2, 0, 1))  # CHW
+    x = np.transpose(x, (2, 0, 1))  # (3, H, W)
     return torch.from_numpy(x)
 
 def read_yolo_csv(csv_path: str) -> Dict[str, List[Tuple[float,float,float,float]]]:
     """
-    Returns dict: {basename (without .png): [(cx,cy,w,h), ...], ...}
-    The CSV uses .txt filenames; the corresponding image is same stem with .png
+    Parse YOLO-style CSV into a dict of normalized boxes per image stem.
+    CSV columns: filename(.txt), class, cx, cy, w, h  -- all normalized to [0,1]
+    Returns:
+      mapping: {stem(str): [(cx,cy,w,h), ...], ...}
     """
     mapping: Dict[str, List[Tuple[float,float,float,float]]] = {}
     with open(csv_path, "r", newline="") as f:
         rdr = csv.DictReader(f)
         for row in rdr:
-            txtname = row["filename"]  # e.g., 5b84....txt
-            stem = os.path.splitext(txtname)[0]
+            txtname = row["filename"]  # e.g., "5b84...a.txt"
+            stem = os.path.splitext(txtname)[0]  # "5b84...a"
             cx, cy, w, h = map(float, (row["cx"], row["cy"], row["w"], row["h"]))
             mapping.setdefault(stem, []).append((cx, cy, w, h))
     return mapping
 
 def yolo_to_xyxy_pixels(cx, cy, w, h, W, H):
-    x = (cx - w/2.0) * W
-    y = (cy - h/2.0) * H
-    ww = w * W
-    hh = h * H
-    return (x, y, x + ww, y + hh)
+    """
+    Convert normalized YOLO box (cx,cy,w,h) to absolute pixel (x1,y1,x2,y2).
+    Args:
+      cx,cy,w,h: floats in [0,1]
+      W,H: image width/height in pixels
+    Returns:
+      (x1,y1,x2,y2): floats in pixel coordinates
+    """
+    x1 = (cx - w/2.0) * W
+    y1 = (cy - h/2.0) * H
+    x2 = (cx + w/2.0) * W
+    y2 = (cy + h/2.0) * H
+    return (x1, y1, x2, y2)
 
 def standardize_channelwise(t: torch.Tensor, eps: float = 1e-6) -> torch.Tensor:
     """
-    t: (C, k, k) or (1, C, k, k)
+    Channel-wise z-score over spatial dims (k,k).
+    Accepts:
+      t: (C, k, k) or (1, C, k, k)
+    Returns:
+      same shape as input; each channel standardized individually.
     """
-    orig_shape = t.shape
+    orig = t
     if t.dim() == 3:
-        t = t.unsqueeze(0)  # (1,C,k,k)
+        t = t.unsqueeze(0)  # (1, C, k, k)
+    # mean/std over spatial dims (k,k) -> shapes (1, C, 1, 1)
     mean = t.mean(dim=(2,3), keepdim=True)
-    std = t.std(dim=(2,3), keepdim=True)
+    std  = t.std(dim=(2,3), keepdim=True)
     t = (t - mean) / (std + eps)
-    return t.view(orig_shape)
+    return t.view(orig.shape)  # back to (C,k,k) if input was 3D
+
 
 # ----------------------------
 # Core
 # ----------------------------
+def _get_feature_map(
+    model: VAE,
+    x: torch.Tensor,
+    feature_source: Literal["feats", "z", "mu"],
+    noise: torch.Tensor
+) -> torch.Tensor:
+    """
+    Forward the encoder and return the chosen spatial map to extract RoI from.
+    Args:
+      model: VAE
+      x:     (B, 3, H, W) float32 in [0,1]
+      feature_source: "feats" | "z" | "mu"
+      noise: (B, 4, H/8, W/8) float32 (required by encoder API)
+    Returns:
+      fmap:
+        - "feats": (B, 512, H/8, W/8)  last spatial map before μ/σ projection
+        - "z":     (B,   4, H/8, W/8)  reparameterized latent (scaled in encoder)
+        - "mu":    (B,   4, H/8, W/8)  mean of q(z|x)
+    """
+    model.eval()
+    with torch.no_grad():
+        if feature_source == "feats":
+            # encoder returns (z, mu, logvar, feats) when return_features=True
+            z, mu, logvar, feats = model.encoder(x, noise, return_features=True)
+            return feats  # (B, 512, h, w)
+        else:
+            # encoder returns (z, mu, logvar) when return_features=False
+            z, mu, logvar = model.encoder(x, noise, return_features=False)
+            if feature_source == "z":
+                return z    # (B, 4, h, w)
+            elif feature_source == "mu":
+                return mu   # (B, 4, h, w)
+            else:
+                raise ValueError(f"Unknown feature_source={feature_source}")
+
 def extract_latent_roi_template(
     model: VAE,
     image_path: str,
     box_xyxy_img: Tuple[float,float,float,float],
     resize_img: int = 256,
     roi_size: int = 9,
+    feature_source: Literal["feats","z","mu"] = "feats",
 ) -> Tuple[torch.Tensor, dict]:
     """
+    Extract a RoI-aligned prototype from the chosen latent map.
+    Args:
+      model: VAE (already moved to device)
+      image_path: path to .png
+      box_xyxy_img: (x1,y1,x2,y2) in image pixel coords (matching resized image)
+      resize_img: final image size (H=W)
+      roi_size: output RoI size (k) -> prototype is (C, k, k)
+      feature_source: which encoder map to use ("feats"=512ch, "z"/"mu"=4ch)
     Returns:
-      proto: (C, roi_size, roi_size) float32 tensor
-      meta: dict with info for reproducibility
+      proto: torch.float32, shape (C, roi_size, roi_size)
+      meta:  dict with reproducibility info
     """
-    model.eval()
     device = next(model.parameters()).device
 
-    # Load & preprocess
-    img = load_image_rgb(image_path, resize=resize_img)
+    # Load & preprocess image
+    img = load_image_rgb(image_path, resize=resize_img)         # np.uint8, (H, W, 3)
     H = W = resize_img
-    x = to_tensor_chw01(img).unsqueeze(0).to(device)  # (1,3,H,W)
+    x = to_tensor_chw01(img).unsqueeze(0).to(device)            # torch.float32, (1, 3, H, W)
 
-    # Build noise to match your VAE.forward
-    _, _, height, width = x.shape
-    zH, zW = height // 8, width // 8  # per your VAE code
-    noise = torch.randn((1, 4, zH, zW), device=device)
+    # Prepare noise for encoder call to match expected latent grid size.
+    # Using zeros for deterministic feats/mu; random for z (if desired).
+    zH, zW = H // 8, W // 8
+    if feature_source in ("feats", "mu"):
+        noise = torch.zeros((1, 4, zH, zW), device=device)      # (1, 4, H/8, W/8)
+    else:
+        noise = torch.randn((1, 4, zH, zW), device=device)      # (1, 4, H/8, W/8)
 
-    # Call encoder directly to get latent z
-    with torch.no_grad():
-        z, mu, logvar = model.encoder(x, noise)  # z: (1,Cz,h,w)
+    # Get the requested spatial map from the encoder
+    fmap = _get_feature_map(model, x, feature_source=feature_source, noise=noise)  # (1, C, h, w)
+    _, C, h, w = fmap.shape  # C=512 if "feats", else C=4
 
-    _, Cz, h, w = z.shape
-    spatial_scale = h / float(H)  # Expect 1/8
+    # Spatial scale factor expected by RoIAlign: maps image pixels -> fmap pixels.
+    # If H=W=256 and h=w=32, spatial_scale = 32/256 = 0.125
+    spatial_scale = h / float(H)
 
-    # ROIAlign expects coords in input-image pixels; we pass spatial_scale
+    # Prepare ROI tensor in image pixel coordinates, including batch index
     x1, y1, x2, y2 = box_xyxy_img
-    rois = torch.tensor([[0, x1, y1, x2, y2]], dtype=torch.float32, device=device)  # (num_rois, 5)
+    rois = torch.tensor([[0, x1, y1, x2, y2]], dtype=torch.float32, device=device)  # (num_rois=1, 5)
 
+    # RoIAlign samples from fmap inside the given image-space box using the spatial_scale
+    # Input:  fmap  (1, C, h, w)
+    # Boxes:  rois  (1, 5) = [batch_idx, x1, y1, x2, y2] in image pixels
+    # Output: roi_feat (1, C, roi_size, roi_size)
     roi_feat = roi_align(
-        input=z,           # (N,C,h,w)
-        boxes=rois,        # (num_rois,5) in image coords
+        input=fmap,
+        boxes=rois,
         output_size=(roi_size, roi_size),
         spatial_scale=spatial_scale,
         sampling_ratio=-1,
         aligned=True
-    )  # (num_rois, Cz, roi_size, roi_size)
+    )  # -> (1, C, k, k)
 
-    proto = roi_feat[0].detach().cpu()  # (Cz,k,k)
+    # Detach to CPU and drop the batch dim
+    proto = roi_feat[0].detach().cpu()  # (C, k, k)
 
-    # Optional: simple channel-wise standardization
-    proto = standardize_channelwise(proto)
+    # Channel-wise standardization to help correlation stability downstream
+    proto = standardize_channelwise(proto)  # (C, k, k)
 
+    # Metadata useful for reproducing extraction and validating compatibility
     meta = dict(
         image_path=image_path,
         box_xyxy=[float(x1), float(y1), float(x2), float(y2)],
         resize_img=resize_img,
         roi_size=roi_size,
-        latent_shape=[int(Cz), int(h), int(w)],
+        feature_source=feature_source,
+        latent_shape=[int(C), int(h), int(w)],   # C,h,w of fmap used
         spatial_scale=float(spatial_scale),
-        note="Channel-wise standardized",
+        note="Channel-wise standardized prototype",
     )
     return proto, meta
 
+
 def main():
+    """
+    CLI tool to extract a latent (RoIAlign) template from annotated images.
+    Saves:
+      - latent_prototype.pt  : torch float32 tensor, (C, k, k)
+      - latent_prototype_meta.json : metadata including feature_source, latent C/h/w, etc.
+    """
     ap = argparse.ArgumentParser(description="Extract a latent (RoIAlign) template from annotated images.")
     ap.add_argument("--images_dir", required=True, help="Folder with .png images")
     ap.add_argument("--csv", required=True, help="YOLO CSV with normalized cx,cy,w,h")
@@ -141,12 +231,16 @@ def main():
     ap.add_argument("--roi_size", type=int, default=9)
     ap.add_argument("--max_crops", type=int, default=1, help="How many crops to average into the prototype (1 = single crop).")
     ap.add_argument("--image_stem", type=str, default=None, help="Optional: force using a specific image stem (without extension).")
+    # NEW: choose which latent to use for the prototype
+    ap.add_argument("--feature_source", type=str, default="feats", choices=["feats", "z", "mu"],
+                    help="Map to extract RoI from: 'feats' (512ch pre-projection), 'z' (4ch reparam, scaled), or 'mu' (4ch mean).")
     args = ap.parse_args()
 
     device = select_device(args.device)
     set_seed(args.seed, deterministic=True, cudnn_benchmark=False)
     create_directory(args.output_dir)
 
+    # Build / load VAE
     model = VAE().to(device)
     if args.checkpoint and os.path.isfile(args.checkpoint):
         state = torch.load(args.checkpoint, map_location=device)
@@ -155,24 +249,30 @@ def main():
     else:
         print("WARNING: No checkpoint provided. Proceeding with randomly initialized VAE (prototype quality will be poor).")
 
-    ann = read_yolo_csv(args.csv)
+    ann = read_yolo_csv(args.csv)  # dict: stem -> list of (cx,cy,w,h)
 
     # Determine which annotated samples to use
     stems = [args.image_stem] if args.image_stem else list(ann.keys())
     used = 0
-    protos = []
-    proto_metas = []
+    protos: List[torch.Tensor] = []  # each (C, k, k) on CPU
+    proto_meta = None
 
     for stem in stems:
         img_path = os.path.join(args.images_dir, stem + ".png")
         if not os.path.isfile(img_path):
             continue
-        for (cx,cy,w,h) in ann[stem]:
-            x1,y1,x2,y2 = yolo_to_xyxy_pixels(cx, cy, w, h, args.resize_img, args.resize_img)
-            proto, meta = extract_latent_roi_template(model, img_path, (x1,y1,x2,y2),
-                                                      resize_img=args.resize_img, roi_size=args.roi_size)
-            protos.append(proto)     # (C,k,k) CPU
-            proto_metas.append(meta)
+        for (cx, cy, w, h) in ann[stem]:
+            # Convert normalized YOLO box to absolute (x1,y1,x2,y2) in resized image pixels
+            x1, y1, x2, y2 = yolo_to_xyxy_pixels(cx, cy, w, h, args.resize_img, args.resize_img)
+            # Extract prototype from the chosen feature map using RoIAlign
+            proto, meta = extract_latent_roi_template(
+                model, img_path, (x1, y1, x2, y2),
+                resize_img=args.resize_img,
+                roi_size=args.roi_size,
+                feature_source=args.feature_source
+            )
+            protos.append(proto)     # append (C, k, k)
+            proto_meta = meta        # last meta retained (settings shared; box/image specific)
             used += 1
             print(f"Added crop from {stem}  box={x1:.1f},{y1:.1f},{x2:.1f},{y2:.1f}")
             if used >= args.max_crops:
@@ -183,23 +283,35 @@ def main():
     if len(protos) == 0:
         raise RuntimeError("No prototypes extracted. Check CSV, paths, and stems.")
 
-    # Build final prototype (mean if >1)
+    # If multiple crops requested, average them channel-wise to build a single prototype.
+    # proto_stack: (N, C, k, k) -> proto_mean: (C, k, k)
     with torch.no_grad():
-        proto_stack = torch.stack(protos, dim=0)  # (N,C,k,k)
-        proto_mean = proto_stack.mean(dim=0)      # (C,k,k)
+        proto_stack = torch.stack(protos, dim=0)  # (N, C, k, k)
+        proto_mean = proto_stack.mean(dim=0)      # (C, k, k)
 
-    # Save
+    # Save prototype tensor
     proto_path = os.path.join(args.output_dir, "latent_prototype.pt")
-    meta_path = os.path.join(args.output_dir, "latent_prototype_meta.json")
+    meta_path  = os.path.join(args.output_dir, "latent_prototype_meta.json")
     torch.save(proto_mean, proto_path)
+
+    # Save concise metadata (includes latent C/h/w for downstream compatibility checks)
+    save_meta = dict(
+        num_crops=len(protos),
+        image_path=proto_meta["image_path"],
+        box_xyxy=proto_meta["box_xyxy"],
+        resize_img=proto_meta["resize_img"],
+        roi_size=proto_meta["roi_size"],
+        feature_source=proto_meta["feature_source"],
+        latent_shape=proto_meta["latent_shape"],   # [C, h, w]
+        spatial_scale=proto_meta["spatial_scale"],
+        note=proto_meta["note"]
+    )
     with open(meta_path, "w") as f:
-        json.dump(dict(
-            **{"num_crops": len(protos)},
-            **proto_metas[0], # base meta
-        ), f, indent=2)
+        json.dump(save_meta, f, indent=2)
 
     print(f"Saved prototype tensor to: {proto_path}")
     print(f"Saved metadata to:       {meta_path}")
+
 
 if __name__ == "__main__":
     main()
