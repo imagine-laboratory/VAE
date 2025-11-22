@@ -74,7 +74,6 @@ If you use this repository or the dataset in your research, please cite:
 @article{xie2025learningVAEagriculture,
   title={Learning Compact Representations of Agricultural Fields: A Study of Variational Autoencoder Variants for Aerial Drone Imagery},
   author={Xie-Li, Danny and Gonzalez-Hernandez, Manfred and Meden, Blaz and Fallas-Moya, Fabian},
-  journal={arXiv preprint arXiv:0000.00000},
   year={2025},
   url={https://github.com/imagine-laboratory/VAE}
 }
