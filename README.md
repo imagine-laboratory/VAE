@@ -26,7 +26,7 @@
 ---
 
 <p align="center">
-  <img src="assets/simple_object_detection_framework.jpg?raw=true" width="99.1%" />
+  <img src="assets/Pipeline_Beta_VQ.jpg?raw=true" width="99.1%" />
 </p>
 
 
